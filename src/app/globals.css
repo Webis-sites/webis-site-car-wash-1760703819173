@@ -12,6 +12,8 @@
     
   --font-size-base: 1rem;
   --transition-base: 0.3s ease-in-out;
+
+  --rtl-direction: rtl;
 }
 
     html {
