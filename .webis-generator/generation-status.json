@@ -1,10 +1,10 @@
 {
-  "timestamp": "2025-10-17T12:57:11.885Z",
+  "projectDir": "car-wash-5427",
   "status": {
     "totalComponents": 11,
-    "completedComponents": 10,
+    "completedComponents": 11,
     "failedComponents": 0,
-    "progress": 91
+    "progress": 100
   },
   "components": [
     {
@@ -70,9 +70,14 @@
     {
       "name": "Footer",
       "type": "footer",
-      "status": "pending",
+      "status": "completed",
       "description": "Page footer with business information and links"
     }
   ],
-  "repoName": "webis-site-car-wash-1760703819173"
+  "tokenUsage": {
+    "totalInputTokens": 22372,
+    "totalOutputTokens": 27228,
+    "totalTokens": 49600,
+    "requests": 12
+  }
 }
