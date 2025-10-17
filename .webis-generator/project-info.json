@@ -1,8 +1,35 @@
 {
   "projectName": "car-wash-5427",
   "businessName": "Car wash",
-  "created": "2025-10-17T12:50:27.388Z",
-  "status": "initialized",
-  "progress": 0,
-  "components": []
+  "description": "Minimal ",
+  "created": "2025-10-17T12:50:56.279Z",
+  "generatedWith": "webis-generator",
+  "repoName": "webis-site-car-wash-1760703819173",
+  "formData": {
+    "businessName": "Car wash",
+    "businessType": "service",
+    "industry": "Services",
+    "businessSize": "solo",
+    "description": "Minimal ",
+    "language": "he",
+    "primaryColor": "#3b82f6",
+    "secondaryColor": "#10b981",
+    "typographyStyle": "modern",
+    "animationPreference": "subtle",
+    "headline": "Cars",
+    "descriptionText": "The best services",
+    "ctaText": "Reserve now",
+    "formFields": "email@gmail.com",
+    "includeTestimonials": true,
+    "includeFAQ": true,
+    "hasProducts": false,
+    "hasServices": true,
+    "hasPortfolio": false,
+    "needsBookingSystem": false,
+    "metaDescription": "",
+    "metaKeywords": "",
+    "designStyles": [
+      "minimalist"
+    ]
+  }
 }
