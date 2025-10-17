@@ -1,0 +1,7 @@
+
+    # robots.txt for Car wash
+    User-agent: *
+    Allow: /
+
+    # Sitemap
+    Sitemap: https://car-wash.com/sitemap.xml
