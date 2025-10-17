@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-10-17T12:50:27.388Z",
+  "timestamp": "2025-10-17T12:58:09.013Z",
   "steps": {
     "planGenerated": false,
     "componentsGenerated": false,
@@ -9,6 +9,6 @@
     "deploymentStarted": false,
     "deploymentComplete": false
   },
-  "deployedUrl": null,
+  "deployedUrl": "webis-site-car-wash-1760703819173-bowumx1i6.vercel.app",
   "error": null
 }
