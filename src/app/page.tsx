@@ -7,6 +7,7 @@ import ProcessSection from '@/components/ProcessSection';
 import TestimonialsSection from '@/components/TestimonialsSection';
 import FAQSection from '@/components/FAQSection';
 import GallerySection from '@/components/GallerySection';
+import CTASection from '@/components/CTASection';
 
 export default function HomePage() {
   return (
@@ -20,6 +21,7 @@ export default function HomePage() {
         <TestimonialsSection />
         <FAQSection />
         <GallerySection />
+        <CTASection />
       </main>
     </>
   );
