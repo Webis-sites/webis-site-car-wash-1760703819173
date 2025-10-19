@@ -49,7 +49,8 @@ jobs:
         continue-on-error: true
         run: |-
 
-          if ! npx tsc --noEmit > type.log 2>&1; then
+          # Use machine-readable output format to capture file paths
+          if ! npx tsc --noEmit --pretty false > type.log 2>&1; then
             echo "Found TypeScript errors."
             echo "has-errors=true" >> $GITHUB_OUTPUT
           fi
@@ -78,45 +79,111 @@ jobs:
 
           PROJECT_STRUCTURE=$(find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" | sort)
 
-          jq -n \
-            --arg projectName "${{ github.repository }}" \
-            --arg repoName "${{ github.event.repository.name }}" \
-            --arg commit "${{ github.sha }}" \
-            --arg branch "${{ github.ref_name }}" \
-            --arg projectStructure "$PROJECT_STRUCTURE" \
-            --rawfile packageJson package.json \
-            --rawfile tsConfig tsconfig.json \
-            '{
+          jq -n   --arg projectName "${{ github.repository }}"   --arg repoName "${{ github.event.repository.name }}"   --arg commit "${{ github.sha }}"   --arg branch "${{ github.ref_name }}"   --arg projectStructure "$PROJECT_STRUCTURE"   --arg packageJson "$(cat package.json 2>/dev/null)"   --arg tsConfig "$(cat tsconfig.json 2>/dev/null)"   '{
               "projectName": $projectName,
               "repoName": $repoName,
               "commit": $commit,
               "branch": $branch,
               "errors": [],
-              "fileContents": {},
               "projectStructure": $projectStructure,
-              "packageJson": ($packageJson | fromjson),
-              "tsConfig": ($tsConfig | fromjson)
+              "packageJson": (try ($packageJson | fromjson) catch null),
+              "tsConfig": (try ($tsConfig | fromjson) catch null)
             }' > error_payload.json
 
-          # Simplified and robust error processing
-          process_log_file() {
-            local log_file="$1"
-            local error_type="$2"
-            if [[ -f "$log_file" ]]; then
-              echo "Processing errors from $log_file..."
-              grep -i "error" "$log_file" | while read -r line; do
-                jq --arg msg "$line" --arg type "$error_type"          '.errors += [{"type": $type, "message": $msg}]' error_payload.json > temp.json && mv temp.json error_payload.json
-              done
+          process_typescript_errors() {
+            if [[ -f "type.log" ]]; then
+              echo "Parsing TypeScript errors..."
+              while IFS= read -r line; do
+                # Pattern 1: file.ts(line,col): error TSXXXX: message
+                if [[ $line =~ ^(.+)\(([0-9]+),([0-9]+)\):\ error\ [A-Za-z0-9]+:\ (.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[2]}"
+                  col="\${BASH_REMATCH[3]}"
+                  msg="\${BASH_REMATCH[4]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 2: file.ts:line:col - error TSXXXX: message
+                elif [[ $line =~ ^(.+):([0-9]+):([0-9]+)\s*-\s*error\s+[A-Za-z0-9]+:\s*(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[2]}"
+                  col="\${BASH_REMATCH[3]}"
+                  msg="\${BASH_REMATCH[4]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 3: file.ts:line - error TSXXXX: message
+                elif [[ $line =~ ^(.+):([0-9]+)\s*-\s*error\s+[A-Za-z0-9]+:\s*(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[2]}"
+                  msg="\${BASH_REMATCH[3]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 4: Generic error with file path
+                elif [[ $line =~ ^(.+\.(tsx?|jsx?)):.*error.*:(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  msg="$line"
+                  jq --arg file "$file" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                fi
+              done < type.log
             else
-              echo "No log file found: $log_file"
+              echo "No type.log found"
             fi
           }
 
-          process_log_file "type.log" "type"
-          process_log_file "build.log" "build"
+          process_build_errors() {
+            if [[ -f "build.log" ]]; then
+              echo "Parsing build errors..."
+              while IFS= read -r line; do
+                # Pattern 1: file.tsx:line:col - error message
+                if [[ $line =~ ^([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)):([0-9]+):([0-9]+)\s*-\s*(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[3]}"
+                  col="\${BASH_REMATCH[4]}"
+                  msg="\${BASH_REMATCH[5]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 2: file.tsx:line:col error message
+                elif [[ $line =~ ^([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)):([0-9]+):([0-9]+)\s+(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[3]}"
+                  col="\${BASH_REMATCH[4]}"
+                  msg="\${BASH_REMATCH[5]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 3: file.tsx:line - error message
+                elif [[ $line =~ ^([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)):([0-9]+)\s*-\s*(.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[3]}"
+                  msg="\${BASH_REMATCH[4]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 4: Generic file path with error
+                elif [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)) ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  msg="$line"
+                  jq --arg file "$file" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                # Pattern 5: Webpack/Next.js specific errors
+                elif [[ $line =~ ^(Error|Failed|Build failed) ]]; then
+                  # Try to extract file path from the error message
+                  if [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)) ]]; then
+                    file="\${BASH_REMATCH[1]}"
+                    msg="$line"
+                    jq --arg file "$file" --arg msg "$msg"              '.errors += [{"type":"build","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                  else
+                    # Generic build error without specific file
+                    msg="$line"
+                    jq --arg msg "$msg"              '.errors += [{"type":"build","file":"unknown","message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                  fi
+                fi
+              done < build.log
+            else
+              echo "No build.log found"
+            fi
+          }
 
-          echo "📊 Error processing complete. Found $(jq '.errors | length' error_payload.json) errors."
-          echo "payload-exists=true" >> $GITHUB_OUTPUT
+          process_typescript_errors
+          process_build_errors
+
+          COUNT=$(jq '.errors | length' error_payload.json)
+          echo "📊 Error processing complete. Found $COUNT errors."
+          if [[ "$COUNT" -gt 0 ]]; then
+            echo "payload-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "payload-exists=false" >> $GITHUB_OUTPUT
+          fi
       - name: Send Errors to AI Fixer API
         if: steps.process-errors.outputs.payload-exists == 'true'
         run: |-
