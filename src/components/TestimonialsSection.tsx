@@ -102,124 +102,85 @@ const TestimonialsSection: React.FC = () => {
     setAutoplay(true);
   };
 
-  // Render stars based on rating
-  const renderStars = (rating: number): JSX.Element[] => {
-    return Array.from({ length: 5 }, (_, index) => (
-      <FaStar 
-        key={index} 
-        className={`inline-block ${index < rating ? 'text-secondary' : 'text-gray-300'}`} 
-        aria-hidden="true"
-      />
-    ));
-  };
-
-  // Visible testimonials based on current index and how many we show per view
-  const visibleTestimonials = testimonials.slice(
-    currentIndex,
-    currentIndex + testimonialsPerView
-  );
-
   return (
-    <section 
-      id="testimonials-section" 
-      dir="rtl" 
-      className="py-16 bg-gray-50"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      aria-labelledby="testimonials-heading"
-    >
+    <section id="testimonials" className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
-          <h2 
-            id="testimonials-heading" 
-            className="text-3xl font-bold text-gray-800 mb-4"
-          >
-            מה הלקוחות שלנו אומרים
-          </h2>
-          <div className="w-24 h-1 bg-primary mx-auto"></div>
+          <h2 className="text-3xl font-bold mb-4">לקוחות מספרים</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">מה לקוחותינו אומרים על השירות שלנו</p>
         </div>
-
-        <div className="relative">
+        
+        <div className="relative max-w-6xl mx-auto" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
           {/* Navigation buttons */}
-          <button
-            onClick={prevSlide}
-            className="absolute right-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 bg-white p-3 rounded-full shadow-md text-primary hover:text-white hover:bg-primary transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-            aria-label="הקודם"
-          >
-            <FaChevronRight className="text-lg" />
-          </button>
+          <div className="absolute top-1/2 -translate-y-1/2 left-0 z-10">
+            <button 
+              onClick={prevSlide}
+              className="bg-white p-3 rounded-full shadow-md hover:bg-gray-100 transition-colors"
+              aria-label="Previous testimonial"
+            >
+              <FaChevronLeft className="text-primary" />
+            </button>
+          </div>
           
-          <button
-            onClick={nextSlide}
-            className="absolute left-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 bg-white p-3 rounded-full shadow-md text-primary hover:text-white hover:bg-primary transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-            aria-label="הבא"
-          >
-            <FaChevronLeft className="text-lg" />
-          </button>
-
-          {/* Testimonials carousel */}
-          <div className="overflow-hidden px-4 md:px-12">
-            <AnimatePresence initial={false} mode="wait">
+          <div className="absolute top-1/2 -translate-y-1/2 right-0 z-10">
+            <button 
+              onClick={nextSlide}
+              className="bg-white p-3 rounded-full shadow-md hover:bg-gray-100 transition-colors"
+              aria-label="Next testimonial"
+            >
+              <FaChevronRight className="text-primary" />
+            </button>
+          </div>
+          
+          {/* Testimonials slider */}
+          <div className="overflow-hidden">
+            <AnimatePresence initial={false}>
               <motion.div 
-                key={currentIndex}
-                className="flex flex-wrap -mx-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
+                className="flex"
+                initial={{ opacity: 1 }}
+                animate={{ x: -currentIndex * (100 / testimonialsPerView) + '%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               >
-                {visibleTestimonials.map((testimonial) => (
+                {testimonials.map((testimonial) => (
                   <div 
                     key={testimonial.id} 
-                    className={`px-4 ${isMobile ? 'w-full' : 'w-1/3'} mb-8`}
+                    className="w-full md:w-1/3 flex-shrink-0 px-4"
+                    style={{ direction: 'rtl' }}
                   >
                     <motion.div 
-                      className="bg-white rounded-lg shadow-lg p-6 h-full flex flex-col"
-                      whileHover={{ y: -5 }}
-                      transition={{ type: "spring", stiffness: 300 }}
+                      className="bg-white p-6 rounded-lg shadow-md h-full flex flex-col"
+                      whileHover={{ y: -5, transition: { duration: 0.2 } }}
                     >
-                      <div className="flex items-center mb-4">
-                        <div className="relative w-16 h-16 rounded-full overflow-hidden mr-4">
-                          <Image
-                            src={testimonial.image}
+                      <blockquote className="flex-1 mb-4">
+                        <p className="text-gray-600 italic">״{testimonial.quote}״</p>
+                      </blockquote>
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 rounded-full overflow-hidden mr-4">
+                          <Image 
+                            src={testimonial.image} 
                             alt={testimonial.name}
-                            fill
-                            sizes="64px"
-                            className="object-cover"
+                            width={48}
+                            height={48}
+                            className="w-full h-full object-cover"
                           />
                         </div>
-                        <div className="text-right">
-                          <h3 className="font-bold text-lg text-gray-800">{testimonial.name}</h3>
-                          <div className="flex justify-end mt-1" aria-label={`דירוג ${testimonial.rating} מתוך 5 כוכבים`}>
-                            {renderStars(testimonial.rating)}
+                        <div>
+                          <p className="font-semibold">{testimonial.name}</p>
+                          <div className="flex mt-1">
+                            {[...Array(5)].map((_, i) => (
+                              <FaStar 
+                                key={i} 
+                                className={i < testimonial.rating ? 'text-yellow-400' : 'text-gray-300'} 
+                              />
+                            ))}
                           </div>
                         </div>
                       </div>
-                      <blockquote className="text-gray-600 text-right flex-grow">
-                        <p className="before:content-['"'] after:content-['"'] before:text-primary after:text-primary before:text-2xl after:text-2xl">
-                          {testimonial.quote}
-                        </p>
-                      </blockquote>
                     </motion.div>
                   </div>
                 ))}
               </motion.div>
             </AnimatePresence>
-          </div>
-
-          {/* Pagination dots */}
-          <div className="flex justify-center mt-8">
-            {Array.from({ length: testimonials.length - testimonialsPerView + 1 }).map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentIndex(index)}
-                className={`mx-1 w-3 h-3 rounded-full focus:outline-none focus:ring-2 focus:ring-primary ${
-                  currentIndex === index ? 'bg-primary' : 'bg-gray-300'
-                }`}
-                aria-label={`עבור לעדות ${index + 1}`}
-                aria-current={currentIndex === index ? 'true' : 'false'}
-              />
-            ))}
           </div>
         </div>
       </div>
