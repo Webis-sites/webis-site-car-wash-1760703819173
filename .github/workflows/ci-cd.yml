@@ -95,11 +95,23 @@ jobs:
               echo "Parsing TypeScript errors..."
               while IFS= read -r line; do
                 if [[ $line =~ ^(.+)\(([0-9]+),([0-9]+)\):\ error\ [A-Za-z0-9]+:\ (.*)$ ]]; then
-                  file="\${BASH_REMATCH[1]}"
-                  lineno="\${BASH_REMATCH[2]}"
-                  col="\${BASH_REMATCH[3]}"
-                  msg="\${BASH_REMATCH[4]}"
-                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                  file="${BASH_REMATCH[1]}"
+                  lineno="${BASH_REMATCH[2]}"
+                  col="${BASH_REMATCH[3]}"
+                  msg="${BASH_REMATCH[4]}"
+                  
+                  # Validate that we have valid values
+                  if [[ -n "$file" && -n "$lineno" && -n "$col" && -n "$msg" ]]; then
+                    echo "Processing TypeScript error: $file:$lineno:$col - $msg"
+                    if jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"              '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json 2>/dev/null; then
+                      mv temp.json error_payload.json
+                    else
+                      echo "Failed to process TypeScript error with jq, skipping: $line"
+                      rm -f temp.json
+                    fi
+                  else
+                    echo "Skipping invalid TypeScript error line: $line"
+                  fi
                 fi
               done < type.log
             else
@@ -112,16 +124,40 @@ jobs:
               echo "Parsing build errors..."
               while IFS= read -r line; do
                 if [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)):([0-9]+):([0-9]+) ]]; then
-                  file="\${BASH_REMATCH[1]}"
-                  lineno="\${BASH_REMATCH[2]}"
-                  col="\${BASH_REMATCH[3]}"
+                  file="${BASH_REMATCH[1]}"
+                  lineno="${BASH_REMATCH[2]}"
+                  col="${BASH_REMATCH[3]}"
                   msg="$line"
-                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                  
+                  # Validate that we have valid values
+                  if [[ -n "$file" && -n "$lineno" && -n "$col" && -n "$msg" ]]; then
+                    echo "Processing build error: $file:$lineno:$col"
+                    if jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"              '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json 2>/dev/null; then
+                      mv temp.json error_payload.json
+                    else
+                      echo "Failed to process build error with jq, skipping: $line"
+                      rm -f temp.json
+                    fi
+                  else
+                    echo "Skipping invalid build error line: $line"
+                  fi
                 else
                   if [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)) ]]; then
-                    file="\${BASH_REMATCH[1]}"
+                    file="${BASH_REMATCH[1]}"
                     msg="$line"
-                    jq --arg file "$file" --arg msg "$msg"              '.errors += [{"type":"build","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                    
+                    # Validate that we have valid values
+                    if [[ -n "$file" && -n "$msg" ]]; then
+                      echo "Processing build error (no line numbers): $file"
+                      if jq --arg file "$file" --arg msg "$msg"                '.errors += [{"type":"build","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json 2>/dev/null; then
+                        mv temp.json error_payload.json
+                      else
+                        echo "Failed to process build error with jq, skipping: $line"
+                        rm -f temp.json
+                      fi
+                    else
+                      echo "Skipping invalid build error line: $line"
+                    fi
                   fi
                 fi
               done < build.log
