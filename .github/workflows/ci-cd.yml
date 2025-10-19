@@ -35,7 +35,6 @@ jobs:
       - name: Run Tests
         id: run-tests
         continue-on-error: true
-        shell: bash
         run: |-
 
           if ! npm test > test.log 2>&1; then
@@ -48,9 +47,9 @@ jobs:
       - name: Run TypeScript Check and Collect Errors
         id: type-check
         continue-on-error: true
-        shell: bash
         run: |-
 
+          # Use machine-readable output format to capture file paths
           if ! npx tsc --noEmit --pretty false > type.log 2>&1; then
             echo "Found TypeScript errors."
             echo "has-errors=true" >> $GITHUB_OUTPUT
@@ -58,7 +57,6 @@ jobs:
       - name: Run Build and Collect Errors
         id: build
         continue-on-error: true
-        shell: bash
         run: |-
 
           if ! npm run build > build.log 2>&1; then
@@ -68,13 +66,12 @@ jobs:
       - name: Process Error Logs and Build Payload
         id: process-errors
         if: steps.type-check.outputs.has-errors == 'true' || steps.build.outputs.has-errors == 'true'
-        shell: bash
         run: |-
-
-          set -e
+          #!/bin/bash
           echo "🔍 Processing error logs and building payload..."
           sudo apt-get update && sudo apt-get install -y jq
 
+          # Debugging - show logs
           echo "=== type.log content ==="
           cat type.log || echo "no type.log"
           echo "=== build.log content ==="
@@ -97,14 +94,16 @@ jobs:
             if [[ -f "type.log" ]]; then
               echo "Parsing TypeScript errors..."
               while IFS= read -r line; do
-                [[ $line =~ ^(.+)(([0-9]+),([0-9]+)): error [A-Za-z0-9]+: (.*)$ ]] && {
-                  file="${BASH_REMATCH[1]}"
-                  lineno="${BASH_REMATCH[2]}"
-                  col="${BASH_REMATCH[3]}"
-                  msg="${BASH_REMATCH[4]}"
-                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"           '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg}]' error_payload.json > tmp && mv tmp error_payload.json
-                }
+                if [[ $line =~ ^(.+)\(([0-9]+),([0-9]+)\):\ error\ [A-Za-z0-9]+:\ (.*)$ ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[2]}"
+                  col="\${BASH_REMATCH[3]}"
+                  msg="\${BASH_REMATCH[4]}"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"type","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                fi
               done < type.log
+            else
+              echo "No type.log found"
             fi
           }
 
@@ -112,14 +111,22 @@ jobs:
             if [[ -f "build.log" ]]; then
               echo "Parsing build errors..."
               while IFS= read -r line; do
-                [[ $line =~ ^([[:alnum:]._/\-]+.tsx?):([0-9]+):([0-9]+)s*-s*(.*)$ ]] && {
-                  file="${BASH_REMATCH[1]}"
-                  lineno="${BASH_REMATCH[2]}"
-                  col="${BASH_REMATCH[3]}"
-                  msg="${BASH_REMATCH[4]}"
-                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"           '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg}]' error_payload.json > tmp && mv tmp error_payload.json
-                }
+                if [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)):([0-9]+):([0-9]+) ]]; then
+                  file="\${BASH_REMATCH[1]}"
+                  lineno="\${BASH_REMATCH[2]}"
+                  col="\${BASH_REMATCH[3]}"
+                  msg="$line"
+                  jq --arg file "$file" --arg line "$lineno" --arg column "$col" --arg msg "$msg"            '.errors += [{"type":"build","file":$file,"line":($line|tonumber),"column":($column|tonumber),"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                else
+                  if [[ $line =~ ([[:alnum:]\._\/\\-]+\.(tsx|jsx|ts|js)) ]]; then
+                    file="\${BASH_REMATCH[1]}"
+                    msg="$line"
+                    jq --arg file "$file" --arg msg "$msg"              '.errors += [{"type":"build","file":$file,"message":$msg,"severity":"error"}]' error_payload.json > temp.json && mv temp.json error_payload.json
+                  fi
+                fi
               done < build.log
+            else
+              echo "No build.log found"
             fi
           }
 
@@ -138,7 +145,8 @@ jobs:
         run: |-
 
           echo "🔧 Sending errors to AI Fixer API..."
-          curl -s -X POST -H "Content-Type: application/json" -d @error_payload.json "${{ env.FIXER_API_ENDPOINT }}"
+          RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d @error_payload.json "${{ env.FIXER_API_ENDPOINT }}")
+          echo "AI Fixer API Response: $RESPONSE"
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         if: steps.process-errors.outputs.payload-exists == 'true' || steps.run-tests.outputs.test-status == 'failed'
@@ -148,3 +156,67 @@ jobs:
             *.log
             error_payload.json
           retention-days: 7
+      - name: Generate Summary Report
+        if: always()
+        run: |-
+
+          REPORT_STATUS="✅ Passed"
+          if [[ "${{ steps.type-check.outputs.has-errors }}" == "true" || "${{ steps.build.outputs.has-errors }}" == "true" ]]; then
+            REPORT_STATUS="❌ Failed"
+          fi
+
+          TEST_STATUS="✅ Passed"
+          if [[ "${{ steps.run-tests.outputs.test-status }}" == "failed" ]]; then
+            TEST_STATUS="❌ Failed"
+          fi
+
+          TS_ERRORS="✅ None Found"
+          if [[ "${{ steps.type-check.outputs.has-errors }}" == "true" ]]; then
+            TS_ERRORS="❌ Found"
+          fi
+
+          BUILD_ERRORS="✅ None Found"
+          if [[ "${{ steps.build.outputs.has-errors }}" == "true" ]]; then
+            BUILD_ERRORS="❌ Found"
+          fi
+
+          cat > ./report.md << EOF
+          # CI Testing Report
+
+          **Repository:** ${{ github.repository }}
+          **Branch:** ${{ github.ref_name }}
+          **Commit:** ${{ github.sha }}
+
+          ---
+
+          ### Build Status
+          - Build: $REPORT_STATUS
+          - Test Status: $TEST_STATUS
+          - TypeScript Errors: $TS_ERRORS
+          - Build Errors: $BUILD_ERRORS
+
+          See attached artifacts for detailed logs and error data.
+          EOF
+      - name: Upload Summary Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: summary-report
+          path: report.md
+          retention-days: 7
+      - name: Trigger Deployment
+        if: steps.type-check.outputs.has-errors != 'true' && steps.build.outputs.has-errors != 'true' && steps.run-tests.outputs.test-status == 'passed'
+        run: |-
+
+          echo "🚀 All tests passed! Triggering deployment..."
+          cat > deployment_payload.json << EOF
+          {
+            "projectName": "${{ github.repository }}",
+            "repoName": "${{ github.event.repository.name }}",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}"
+          }
+          EOF
+          DEPLOY_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d @deployment_payload.json "${{ env.DEPLOYMENT_API_ENDPOINT }}")
+          echo "Deployment API Response: $DEPLOY_RESPONSE"
+          echo "✅ Deployment triggered successfully"
